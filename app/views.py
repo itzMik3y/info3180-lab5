@@ -5,10 +5,13 @@ Werkzeug Documentation:  https://werkzeug.palletsprojects.com/
 This file creates your application.
 """
 
-from app import app
+from app import app,db
 from flask import render_template, request, jsonify, send_file
+from werkzeug.utils import secure_filename
 from app.models import Movie
 from app.forms import MovieForm
+from flask_wtf.csrf import generate_csrf
+import traceback
 import os
 
 
@@ -29,34 +32,45 @@ def index():
 # which we can later use
 @app.route('/api/v1/movies', methods=['POST'])
 def movies():
-    form = MovieForm()
-
+    form = MovieForm(request.form)
+    print(form)
+    
     if form.validate_on_submit():
-        # Save the movie to the database
-        movie = Movie(
-            title=form.title.data,
-            description=form.description.data,
-            poster=form.poster.data.filename
-        )
-        db.session.add(movie)
-        db.session.commit()
+        try:
+            # Assuming the form has a 'poster' field for an uploaded file
+            poster_file = request.files.get('poster')
+            filename = secure_filename(poster_file.filename)
+            poster_path = os.path.join(app.config['UPLOAD_FOLDER'], filename)
+            poster_file.save(poster_path)
 
-        # Save the file to the uploads folder
-        poster_file = form.poster.data
-        filename = os.path.join(app.config['UPLOAD_FOLDER'], poster_file.filename)
-        poster_file.save(filename)
+            movie = Movie(
+                title=form.title.data,
+                description=form.description.data,
+                poster=filename  # Assuming you store just the filename
+            )
+            db.session.add(movie)
+            db.session.commit()
 
-        return jsonify({
-            "message": "Movie Successfully added",
-            "title": movie.title,
-            "poster": movie.poster,
-            "description": movie.description
-        }), 201
+            return jsonify({
+                "message": "Movie Successfully added",
+                "title": movie.title,
+                "poster": movie.poster,
+                "description": movie.description
+            }), 201
+
+        except Exception as e:
+            traceback.print_exc()  # Print the traceback to the console for debugging
+            return jsonify({"error": "Internal Server Error"}), 500
 
     else:
-        # Form validation failed
-        return jsonify({"errors": form_errors(form)}), 400
+        # Collect form validation errors
+        errors = [{"field": field, "errors": errs} for field, errs in form.errors.items()]
+        return jsonify({"errors": errors}), 400
 
+
+@app.route('/api/v1/csrf-token', methods=['GET'])
+def get_csrf():
+    return jsonify({'csrf_token': generate_csrf()})
 
 def form_errors(form):
     error_messages = []

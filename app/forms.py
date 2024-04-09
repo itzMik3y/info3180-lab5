@@ -3,6 +3,8 @@ from flask_wtf import FlaskForm
 from wtforms import StringField, TextAreaField, FileField
 from wtforms.validators import DataRequired
 from werkzeug.utils import secure_filename
+from wtforms import ValidationError
+
 import os
 
 class MovieForm(FlaskForm):
